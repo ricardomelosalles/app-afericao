@@ -60,7 +60,7 @@ async function getOcrWorker(){
   if(s&&m.status==='recognizing text')s.textContent='Analisando visor… '+Math.round((m.progress||0)*100)+'%';
  }});
  await ocrWorker.setParameters({
-  tessedit_char_whitelist:'0123456789-−.,°C ',
+  tessedit_char_whitelist:'0123456789-−.,',
   tessedit_pageseg_mode:'7',
   preserve_interword_spaces:'1'
  });
@@ -75,8 +75,8 @@ function ocrOpen(field){
  const o=document.createElement('div');o.id='ocr';
  o.style.cssText='position:fixed;inset:0;z-index:9999;background:#000;display:flex;flex-direction:column';
  o.innerHTML='<video id="ocrV" autoplay playsinline muted style="width:100%;height:100%;flex:1;min-height:0;object-fit:cover"></video>'+
- '<div id="ocrBox" style="position:absolute;left:8%;right:8%;top:32%;height:20%;border:3px solid #e8a838;border-radius:12px;box-shadow:0 0 0 999px #0008;pointer-events:none"></div>'+
- '<div style="position:absolute;top:calc(env(safe-area-inset-top,0px) + 12px);left:0;right:0;text-align:center;color:#fff;font-size:14px;padding:10px 16px;text-shadow:0 1px 4px #000">Centralize somente os números do visor dentro da moldura</div>'+
+ '<div id="ocrBox" style="position:absolute;left:18%;right:18%;top:20%;height:23%;border:3px solid #e8a838;border-radius:12px;box-shadow:0 0 0 999px #0008;pointer-events:none"></div>'+
+ '<div style="position:absolute;top:calc(env(safe-area-inset-top,0px) + 12px);left:0;right:0;text-align:center;color:#fff;font-size:14px;padding:10px 16px;text-shadow:0 1px 4px #000">Enquadre os números grandes da temperatura dentro da moldura</div>'+
  '<div id="ocrStatus" style="position:absolute;left:12px;right:12px;bottom:88px;background:#10231feF;color:#fff;text-align:center;padding:10px;border-radius:9px;font-size:13px">Iniciando câmera e leitura automática…</div>'+
  '<div style="padding:14px;display:flex;gap:10px;background:#0e1815">'+
  '<button class="btn ghost" style="flex:1" onclick="ocrClose()">Cancelar</button>'+
@@ -117,12 +117,19 @@ function ocrCrop(){
  const sw=Math.min(v.videoWidth-sx,b.width/scale),sh=Math.min(v.videoHeight-sy,b.height/scale);
  if(sw<=0||sh<=0)return null;
  const c=document.createElement('canvas');
- const factor=Math.min(2.5,1200/Math.max(sw,sh));
+ const factor=Math.min(4,1800/Math.max(sw,sh));
  c.width=Math.max(1,Math.round(sw*factor));c.height=Math.max(1,Math.round(sh*factor));
  const ctx=c.getContext('2d',{willReadFrequently:true});
- ctx.filter='contrast(1.35) brightness(1.08)';
+ // Amplia e separa os segmentos brancos do fundo verde do visor.
+ ctx.imageSmoothingEnabled=true;ctx.imageSmoothingQuality='high';
  ctx.drawImage(v,sx,sy,sw,sh,0,0,c.width,c.height);
- ctx.filter='none';
+ const frame=ctx.getImageData(0,0,c.width,c.height),px=frame.data;
+ for(let i=0;i<px.length;i+=4){
+  const gray=0.299*px[i]+0.587*px[i+1]+0.114*px[i+2];
+  const value=gray>158?255:0;
+  px[i]=px[i+1]=px[i+2]=value;px[i+3]=255;
+ }
+ ctx.putImageData(frame,0,0);
  return c;
 }
 function parseTemperatureText(raw){
@@ -146,7 +153,7 @@ async function ocrScanOnce(){
   const result=await worker.recognize(canvas);
   const confidence=Number(result?.data?.confidence||0);
   const value=parseTemperatureText(result?.data?.text||'');
-  if(value!==null&&confidence>=45){
+  if(value!==null&&confidence>=20){
    const status=document.getElementById('ocrStatus');
    if(status)status.textContent='Leitura identificada: '+value.replace('.',',')+' °C';
    return value;
