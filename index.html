@@ -38,58 +38,157 @@ const EQUIPAMENTOS = [{"id":1,"name":"Sala de pesagem","limit":"14 a 18°","page
 
 </script><script>
 'use strict';const TIMES=['00:00','03:00','06:00','09:00','12:00','15:00','18:00','21:00'],CATS=['Refrigerados','Câmaras','Freezers','Cafeteria','Ilhas'],ROLES=['Manutenção','Frios','Líder de Prevenção','Nutricionista','Gerência'];let db,day,screen='home',cat='',time='00:00',selectedDate=new Date().toLocaleDateString('en-CA');const $=id=>document.getElementById(id), esc=s=>String(s??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
-function openDb(){return new Promise((res,rej)=>{let q=indexedDB.open('afericao245-v2',1);q.onupgradeneeded=()=>q.result.createObjectStore('dias',{keyPath:'date'});q.onsuccess=()=>{db=q.result;res()};q.onerror=()=>rej(q.error)})}function tx(mode){return db.transaction('dias',mode).objectStore('dias')}function getDay(d){return new Promise((res,rej)=>{let q=tx('readonly').get(d);q.onsuccess=()=>res(q.result||{date:d,records:{},signs:{},notes:{},fiscals:{}});q.onerror=()=>rej(q.error)})}function save(){return new Promise((res,rej)=>{let q=tx('readwrite').put(day);q.onsuccess=()=>res();q.onerror=()=>rej(q.error)})}async function setDate(d){selectedDate=d;day=await getDay(d);home()}function key(id,t){return t+'|'+id}function count(t){return EQUIPAMENTOS.filter(e=>day.records[key(e.id,t)]?.done).length}function complete(t){return count(t)===EQUIPAMENTOS.length}function header(title,back='home'){return `<div class="buttons"><button class="btn ghost" onclick="${back}()">← Voltar</button></div><h2>${title}</h2>`}function setHtml(s){$('app').innerHTML=s}function home(){screen='home';setHtml(`<div class="card"><label>Data da aferição</label><input type="date" value="${esc(selectedDate)}" onchange="setDate(this.value)"><label>Horário programado</label><select id="slot" onchange="time=this.value;home()">${TIMES.map(t=>`<option ${t===time?'selected':''}>${t}</option>`).join('')}</select><div class="status">${count(time)} de ${EQUIPAMENTOS.length} equipamentos registrados neste horário</div><div style="height:7px;background:#31554b;border-radius:20px"><div style="width:${count(time)/EQUIPAMENTOS.length*100}%;height:100%;background:#efb24d;border-radius:20px"></div></div></div><div class="grid">${CATS.map(c=>{let list=EQUIPAMENTOS.filter(e=>e.cat===c),n=list.filter(e=>day.records[key(e.id,time)]?.done).length;return `<button class="tile" onclick="openCat('${c}')"><span>🌡️</span><b>${c}</b><small>${n}/${list.length} aferidos ${n===list.length?'✓':''}</small></button>`}).join('')}<button class="tile" onclick="report()"><span>📋</span><b>Relatório do dia</b><small>PDF no modelo original • 4 páginas</small></button><button class="tile" onclick="showHistory()"><span>🗓️</span><b>Histórico</b><small>Consultar dias anteriores</small></button></div><div class="card"><h3>Encerramento do horário ${time}</h3><label>Nome do fiscal</label><input id="fiscal" value="${esc(day.fiscals[time]||'')}" placeholder="Nome do responsável"><label>Observações do horário</label><textarea id="obs" rows="2" placeholder="Ocorrências e providências">${esc(day.notes[time]||'')}</textarea><div class="buttons"><button class="btn alt" onclick="saveFooter()">Salvar identificação e observações</button><button class="btn" onclick="finishSlot()">Concluir horário</button></div><small>Os registros de outros horários são preservados. O relatório pode ser gerado a qualquer momento.</small></div><div class="buttons"><button class="btn ghost" onclick="backup()">Exportar backup</button><button class="btn ghost" onclick="$('restore').click()">Restaurar backup</button><input class="hidden" id="restore" type="file" accept="application/json" onchange="restoreBackup(this.files[0])"></div><p class="small muted">Dados guardados somente neste navegador/celular. Faça backups frequentes. Não use navegação anônima.</p>`)}let ocrCtx=null,ocrStream=null;
-function ocrOpen(field){ocrCtx=field;const o=document.createElement('div');o.id='ocr';o.style.cssText='position:fixed;inset:0;z-index:99;background:#000;display:flex;flex-direction:column';
-o.innerHTML='<video id="ocrV" autoplay playsinline muted style="flex:1;min-height:0;object-fit:cover"></video><div id="ocrBox" style="position:absolute;left:12%;right:12%;top:30%;height:22%;border:3px solid #e8a838;border-radius:10px;box-shadow:0 0 0 999px #0009"></div><div style="position:absolute;top:calc(env(safe-area-inset-top,0px) + 14px);left:0;right:0;text-align:center;color:#fff;font-size:14px;padding:0 16px">Enquadre o número grande do visor. A leitura é automática (v3)</div><div style="padding:14px;display:flex;gap:10px;background:#0e1815"><button class="btn ghost" style="flex:1" onclick="ocrClose()">Cancelar</button><button class="btn" style="flex:2" id="ocrGo" onclick="ocrRead()">Ler temperatura</button></div>';
-document.body.appendChild(o);
-navigator.mediaDevices.getUserMedia({video:{facingMode:'environment',width:{ideal:1920},height:{ideal:1080}}}).then(st=>{ocrStream=st;document.getElementById('ocrV').srcObject=st;ocrAuto()}).catch(()=>{ocrClose();alert('Não foi possível abrir a câmera. Digite o valor manualmente.')})}
-function ocrClose(){ocrOn=false;if(ocrStream){ocrStream.getTracks().forEach(t=>t.stop());ocrStream=null}const o=document.getElementById('ocr');if(o)o.remove()}
-function ccl(mk,W,H){const lab=new Int32Array(W*H),box=[null];let n=0;const st=[];
-for(let s=0;s<W*H;s++){if(!mk[s]||lab[s])continue;n++;const b={x0:W,y0:H,x1:0,y1:0,a:0};st.push(s);lab[s]=n;
-while(st.length){const q=st.pop(),x=q%W,y=(q-x)/W;b.a++;if(x<b.x0)b.x0=x;if(x>b.x1)b.x1=x;if(y<b.y0)b.y0=y;if(y>b.y1)b.y1=y;
-for(let dy=-1;dy<=1;dy++)for(let dx=-1;dx<=1;dx++){const nx=x+dx,ny=y+dy;if(nx<0||ny<0||nx>=W||ny>=H)continue;const k=ny*W+nx;if(mk[k]&&!lab[k]){lab[k]=n;st.push(k)}}}
-box.push(b)}return{lab,box}}
-function dil(m,W,H,r){const t=new Uint8Array(W*H),o=new Uint8Array(W*H);
-for(let y=0;y<H;y++)for(let x=0;x<W;x++)if(m[y*W+x])for(let k=Math.max(0,x-r);k<=Math.min(W-1,x+r);k++)t[y*W+k]=1;
-for(let y=0;y<H;y++)for(let x=0;x<W;x++)if(t[y*W+x])for(let k=Math.max(0,y-r);k<=Math.min(H-1,y+r);k++)o[k*W+x]=1;return o}
-const SEGPAT={abcdef:'0',bc:'1',abdeg:'2',abcdg:'3',bcfg:'4',acdfg:'5',acdefg:'6',abc:'7',abcdefg:'8',abcdfg:'9'};
-function readSegments(c){const W=c.width,H=c.height,N=W*H,d=c.getContext('2d',{willReadFrequently:true}).getImageData(0,0,W,H).data,mn=new Uint8Array(N),h=new Uint32Array(256);
-for(let i=0;i<N;i++){const v=Math.min(d[4*i],d[4*i+1],d[4*i+2]);mn[i]=v;h[v]++}
-let acc=0,p=255;for(let v=255;v>=0;v--){acc+=h[v];if(acc>N*.02){p=v;break}}
-const T=Math.max(150,p*.85),m=new Uint8Array(N);for(let i=0;i<N;i++)m[i]=mn[i]>T?1:0;window.__dbg={m:m,W:W,H:H,T:T};
-const r0=ccl(m,W,H);for(let i=0;i<N;i++)if(m[i]&&r0.box[r0.lab[i]].a<700)m[i]=0;
-const r2=ccl(dil(m,W,H,5),W,H),B=r2.box.slice(1);if(!B.length)return null;
-const hh=b=>b.y1-b.y0+1,ww=b=>b.x1-b.x0+1,HM=Math.max(...B.map(hh));
-const dg=B.map((b,i)=>({b,id:i+1})).filter(o=>hh(o.b)>=.6*HM&&o.b.a>20).sort((a,b)=>a.b.x0-b.b.x0);if(!dg.length)return null;
-const top=Math.min(...dg.map(o=>o.b.y0)),bot=Math.max(...dg.map(o=>o.b.y1)),fx=dg[0].b.x0;
-let neg=B.some(b=>hh(b)<.3*HM&&ww(b)>.2*HM&&b.x0<fx&&(b.y0+b.y1)/2>top+.3*(bot-top)&&(b.y0+b.y1)/2<top+.7*(bot-top));
-const tok=dg.map(({b,id})=>{const bw=ww(b),bh=hh(b);if(bw<.3*bh)return'1';
-const sg=(x0,x1,y0,y1,vert)=>{const xa=Math.floor(b.x0+x0*bw),xb=Math.floor(b.x0+x1*bw),ya=Math.floor(b.y0+y0*bh),yb=Math.floor(b.y0+y1*bh);let hit=0,tot=0;
-if(vert){for(let y=ya;y<=yb;y++){tot++;for(let x=xa;x<=xb;x++)if(m[y*W+x]&&r2.lab[y*W+x]===id){hit++;break}}}
-else{for(let x=xa;x<=xb;x++){tot++;for(let y=ya;y<=yb;y++)if(m[y*W+x]&&r2.lab[y*W+x]===id){hit++;break}}}return tot?hit/tot:0};
-const S={a:sg(.3,.7,0,.2,0),b:sg(.75,1,.12,.4,1),c:sg(.75,1,.6,.88,1),d:sg(.3,.7,.8,1,0),e:sg(0,.25,.6,.88,1),f:sg(0,.25,.12,.4,1),g:sg(.3,.7,.4,.6,0)};
-return SEGPAT[Object.keys(S).filter(k=>S[k]>.6).join('')]||'?'});
-return{neg,tok}}
-async function ocrRead(){const v=document.getElementById('ocrV');if(!v||!v.videoWidth)return;const b=document.getElementById('ocrBox').getBoundingClientRect(),r=v.getBoundingClientRect();
-const k=Math.max(r.width/v.videoWidth,r.height/v.videoHeight),ox=(v.videoWidth*k-r.width)/2,oy=(v.videoHeight*k-r.height)/2,sx=(b.left-r.left+ox)/k,sy=(b.top-r.top+oy)/k,sw=b.width/k,sh=b.height/k;
-const c=document.createElement('canvas');c.height=360;c.width=Math.round(360*sw/sh);c.getContext('2d').drawImage(v,sx,sy,sw,sh,0,0,c.width,c.height);
-const btn=document.getElementById('ocrGo');btn.disabled=true;btn.textContent='Lendo...';await new Promise(z=>setTimeout(z,30));
-let ent=null,neg=false;try{const o=readSegments(c);if(o&&o.tok.length>=2){const t=o.tok.slice(0,-1);if(t.every(x=>x!=='?')&&t.length<=3){ent=t.join('');neg=o.neg}}}catch(e){}
-btn.disabled=false;btn.textContent='Ler temperatura';
-if(ent===null){const g=window.__dbg,o=document.getElementById('ocr');let bx=document.getElementById('ocrDbg');if(!bx){bx=document.createElement('div');bx.id='ocrDbg';bx.style.cssText='position:absolute;left:10px;right:10px;bottom:84px;background:#fff;color:#000;padding:8px;font-size:12px;border-radius:8px';o.appendChild(bx)}
-bx.innerHTML='Não consegui ler. Aproxime, evite reflexo e mantenha parado. (leitor v2, limiar '+(g?Math.round(g.T):'-')+')<br>';
-if(g){const cv=document.createElement('canvas');cv.width=g.W;cv.height=g.H;const cx=cv.getContext('2d'),im=cx.createImageData(g.W,g.H);for(let i=0;i<g.W*g.H;i++){const q=g.m[i]?0:255;im.data[4*i]=im.data[4*i+1]=im.data[4*i+2]=q;im.data[4*i+3]=255}cx.putImageData(im,0,0);cv.style.cssText='width:100%;max-height:120px;object-fit:contain;border:1px solid #999';bx.appendChild(cv)}
-return}
-const f=ocrCtx;ocrClose();f.value=(neg?'-':'')+ent;f.dataset.ocr='1';f.focus();f.setSelectionRange(f.value.length,f.value.length)}
-function ocrGrab(){const v=document.getElementById('ocrV');if(!v||!v.videoWidth)return null;const b=document.getElementById('ocrBox').getBoundingClientRect(),r=v.getBoundingClientRect();
-const k=Math.max(r.width/v.videoWidth,r.height/v.videoHeight),ox=(v.videoWidth*k-r.width)/2,oy=(v.videoHeight*k-r.height)/2,sx=(b.left-r.left+ox)/k,sy=(b.top-r.top+oy)/k,sw=b.width/k,sh=b.height/k;
-const c=document.createElement('canvas');c.height=360;c.width=Math.round(360*sw/sh);c.getContext('2d').drawImage(v,sx,sy,sw,sh,0,0,c.width,c.height);
-try{const o=readSegments(c);if(o&&o.tok.length>=2){const t=o.tok.slice(0,-1);if(t.every(x=>x!=='?')&&t.length<=3)return(o.neg?'-':'')+t.join('')}}catch(e){}return null}
-let ocrOn=false,ocrLast=null,ocrHits=0;
-function ocrAuto(){ocrOn=true;ocrLast=null;ocrHits=0;const tick=()=>{if(!ocrOn||!document.getElementById('ocr'))return;const val=ocrGrab();
-if(val&&val===ocrLast)ocrHits++;else{ocrLast=val;ocrHits=val?1:0}
-if(val&&ocrHits>=3){const f=ocrCtx;ocrClose();f.value=val;f.dataset.ocr='1';if(navigator.vibrate)navigator.vibrate(80);f.focus();f.setSelectionRange(f.value.length,f.value.length);return}
-setTimeout(tick,300)};setTimeout(tick,600)}
+function openDb(){return new Promise((res,rej)=>{let q=indexedDB.open('afericao245-v2',1);q.onupgradeneeded=()=>q.result.createObjectStore('dias',{keyPath:'date'});q.onsuccess=()=>{db=q.result;res()};q.onerror=()=>rej(q.error)})}function tx(mode){return db.transaction('dias',mode).objectStore('dias')}function getDay(d){return new Promise((res,rej)=>{let q=tx('readonly').get(d);q.onsuccess=()=>res(q.result||{date:d,records:{},signs:{},notes:{},fiscals:{}});q.onerror=()=>rej(q.error)})}function save(){return new Promise((res,rej)=>{let q=tx('readwrite').put(day);q.onsuccess=()=>res();q.onerror=()=>rej(q.error)})}async function setDate(d){selectedDate=d;day=await getDay(d);home()}function key(id,t){return t+'|'+id}function count(t){return EQUIPAMENTOS.filter(e=>day.records[key(e.id,t)]?.done).length}function complete(t){return count(t)===EQUIPAMENTOS.length}function header(title,back='home'){return `<div class="buttons"><button class="btn ghost" onclick="${back}()">← Voltar</button></div><h2>${title}</h2>`}function setHtml(s){$('app').innerHTML=s}function home(){screen='home';setHtml(`<div class="card"><label>Data da aferição</label><input type="date" value="${esc(selectedDate)}" onchange="setDate(this.value)"><label>Horário programado</label><select id="slot" onchange="time=this.value;home()">${TIMES.map(t=>`<option ${t===time?'selected':''}>${t}</option>`).join('')}</select><div class="status">${count(time)} de ${EQUIPAMENTOS.length} equipamentos registrados neste horário</div><div style="height:7px;background:#31554b;border-radius:20px"><div style="width:${count(time)/EQUIPAMENTOS.length*100}%;height:100%;background:#efb24d;border-radius:20px"></div></div></div><div class="grid">${CATS.map(c=>{let list=EQUIPAMENTOS.filter(e=>e.cat===c),n=list.filter(e=>day.records[key(e.id,time)]?.done).length;return `<button class="tile" onclick="openCat('${c}')"><span>🌡️</span><b>${c}</b><small>${n}/${list.length} aferidos ${n===list.length?'✓':''}</small></button>`}).join('')}<button class="tile" onclick="report()"><span>📋</span><b>Relatório do dia</b><small>PDF no modelo original • 4 páginas</small></button><button class="tile" onclick="showHistory()"><span>🗓️</span><b>Histórico</b><small>Consultar dias anteriores</small></button></div><div class="card"><h3>Encerramento do horário ${time}</h3><label>Nome do fiscal</label><input id="fiscal" value="${esc(day.fiscals[time]||'')}" placeholder="Nome do responsável"><label>Observações do horário</label><textarea id="obs" rows="2" placeholder="Ocorrências e providências">${esc(day.notes[time]||'')}</textarea><div class="buttons"><button class="btn alt" onclick="saveFooter()">Salvar identificação e observações</button><button class="btn" onclick="finishSlot()">Concluir horário</button></div><small>Os registros de outros horários são preservados. O relatório pode ser gerado a qualquer momento.</small></div><div class="buttons"><button class="btn ghost" onclick="backup()">Exportar backup</button><button class="btn ghost" onclick="$('restore').click()">Restaurar backup</button><input class="hidden" id="restore" type="file" accept="application/json" onchange="restoreBackup(this.files[0])"></div><p class="small muted">Dados guardados somente neste navegador/celular. Faça backups frequentes. Não use navegação anônima.</p>`)}let ocrCtx=null,ocrStream=null,ocrOn=false,ocrWorker=null,ocrBusy=false,ocrLast=null,ocrHits=0,ocrScriptPromise=null;
+function loadTesseract(){
+ if(window.Tesseract)return Promise.resolve(window.Tesseract);
+ if(ocrScriptPromise)return ocrScriptPromise;
+ ocrScriptPromise=new Promise((resolve,reject)=>{
+  const s=document.createElement('script');
+  s.src='https://cdn.jsdelivr.net/npm/tesseract.js@5/dist/tesseract.min.js';
+  s.async=true;
+  s.onload=()=>window.Tesseract?resolve(window.Tesseract):reject(Error('Biblioteca de leitura não carregou'));
+  s.onerror=()=>reject(Error('Sem acesso à biblioteca OCR. Verifique a conexão com a internet.'));
+  document.head.appendChild(s);
+ });
+ return ocrScriptPromise;
+}
+async function getOcrWorker(){
+ if(ocrWorker)return ocrWorker;
+ const T=await loadTesseract();
+ ocrWorker=await T.createWorker('eng',1,{logger:m=>{
+  const s=document.getElementById('ocrStatus');
+  if(s&&m.status==='recognizing text')s.textContent='Analisando visor… '+Math.round((m.progress||0)*100)+'%';
+ }});
+ await ocrWorker.setParameters({
+  tessedit_char_whitelist:'0123456789-−.,°C ',
+  tessedit_pageseg_mode:'7',
+  preserve_interword_spaces:'1'
+ });
+ return ocrWorker;
+}
+function ocrOpen(field){
+ if(!window.isSecureContext||!navigator.mediaDevices?.getUserMedia){
+  alert('A câmera precisa ser aberta em uma página HTTPS ou localhost. Digite a temperatura manualmente se estiver usando um arquivo local.');
+  return;
+ }
+ ocrCtx=field;ocrOn=true;ocrBusy=false;ocrLast=null;ocrHits=0;
+ const o=document.createElement('div');o.id='ocr';
+ o.style.cssText='position:fixed;inset:0;z-index:9999;background:#000;display:flex;flex-direction:column';
+ o.innerHTML='<video id="ocrV" autoplay playsinline muted style="width:100%;height:100%;flex:1;min-height:0;object-fit:cover"></video>'+
+ '<div id="ocrBox" style="position:absolute;left:8%;right:8%;top:32%;height:20%;border:3px solid #e8a838;border-radius:12px;box-shadow:0 0 0 999px #0008;pointer-events:none"></div>'+
+ '<div style="position:absolute;top:calc(env(safe-area-inset-top,0px) + 12px);left:0;right:0;text-align:center;color:#fff;font-size:14px;padding:10px 16px;text-shadow:0 1px 4px #000">Centralize somente os números do visor dentro da moldura</div>'+
+ '<div id="ocrStatus" style="position:absolute;left:12px;right:12px;bottom:88px;background:#10231feF;color:#fff;text-align:center;padding:10px;border-radius:9px;font-size:13px">Iniciando câmera e leitura automática…</div>'+
+ '<div style="padding:14px;display:flex;gap:10px;background:#0e1815">'+
+ '<button class="btn ghost" style="flex:1" onclick="ocrClose()">Cancelar</button>'+
+ '<button class="btn" style="flex:2" id="ocrGo" onclick="ocrReadNow()">Ler agora</button></div>';
+ document.body.appendChild(o);
+ navigator.mediaDevices.getUserMedia({audio:false,video:{facingMode:{ideal:'environment'},width:{ideal:1920},height:{ideal:1080}}})
+ .then(async st=>{
+  if(!ocrOn){st.getTracks().forEach(t=>t.stop());return}
+  ocrStream=st;
+  const v=document.getElementById('ocrV');if(!v)return;
+  v.srcObject=st;
+  await v.play();
+  const status=document.getElementById('ocrStatus');
+  if(status)status.textContent='Carregando leitor de visor…';
+  await getOcrWorker();
+  if(!ocrOn)return;
+  if(status)status.textContent='Aponte para o visor. A leitura será preenchida automaticamente.';
+  ocrAuto();
+ }).catch(err=>{
+  ocrClose();
+  alert('Não foi possível iniciar a câmera/leitura: '+(err?.message||'verifique a permissão da câmera e a conexão com a internet. Digite o valor manualmente.'));
+ });
+}
+function ocrClose(){
+ ocrOn=false;ocrBusy=false;
+ if(ocrStream){ocrStream.getTracks().forEach(t=>t.stop());ocrStream=null}
+ const o=document.getElementById('ocr');if(o)o.remove();
+}
+function ocrCrop(){
+ const v=document.getElementById('ocrV'),box=document.getElementById('ocrBox');
+ if(!v||!box||!v.videoWidth||!v.videoHeight)return null;
+ const b=box.getBoundingClientRect(),r=v.getBoundingClientRect();
+ // Corrige o recorte considerando object-fit:cover no vídeo vertical.
+ const scale=Math.max(r.width/v.videoWidth,r.height/v.videoHeight);
+ const offsetX=(v.videoWidth*scale-r.width)/2,offsetY=(v.videoHeight*scale-r.height)/2;
+ const sx=Math.max(0,(b.left-r.left+offsetX)/scale);
+ const sy=Math.max(0,(b.top-r.top+offsetY)/scale);
+ const sw=Math.min(v.videoWidth-sx,b.width/scale),sh=Math.min(v.videoHeight-sy,b.height/scale);
+ if(sw<=0||sh<=0)return null;
+ const c=document.createElement('canvas');
+ const factor=Math.min(2.5,1200/Math.max(sw,sh));
+ c.width=Math.max(1,Math.round(sw*factor));c.height=Math.max(1,Math.round(sh*factor));
+ const ctx=c.getContext('2d',{willReadFrequently:true});
+ ctx.filter='contrast(1.35) brightness(1.08)';
+ ctx.drawImage(v,sx,sy,sw,sh,0,0,c.width,c.height);
+ ctx.filter='none';
+ return c;
+}
+function parseTemperatureText(raw){
+ let s=String(raw||'').replace(/[−–—]/g,'-').replace(/,/g,'.');
+ // Aceita somente um número plausível isolado; ignora letras/unidades do visor.
+ const matches=s.match(/-?\s*\d{1,3}(?:\s*[.,]\s*\d{1,2})?/g)||[];
+ const vals=matches.map(x=>x.replace(/\s+/g,'').replace(',','.')).filter(x=>{
+  const n=Number(x);return Number.isFinite(n)&&Math.abs(n)<=150;
+ });
+ if(!vals.length)return null;
+ // Em uma moldura ajustada ao visor, o primeiro número costuma ser a leitura principal.
+ return vals[0];
+}
+async function ocrScanOnce(){
+ if(!ocrOn||ocrBusy)return;
+ const canvas=ocrCrop();if(!canvas)return;
+ ocrBusy=true;
+ const btn=document.getElementById('ocrGo');if(btn){btn.disabled=true;btn.textContent='Lendo…'}
+ try{
+  const worker=await getOcrWorker();
+  const result=await worker.recognize(canvas);
+  const confidence=Number(result?.data?.confidence||0);
+  const value=parseTemperatureText(result?.data?.text||'');
+  if(value!==null&&confidence>=45){
+   const status=document.getElementById('ocrStatus');
+   if(status)status.textContent='Leitura identificada: '+value.replace('.',',')+' °C';
+   return value;
+  }
+  const status=document.getElementById('ocrStatus');
+  if(status)status.textContent='Não identifiquei a temperatura. Ajuste o foco, aproxime e evite reflexos.';
+ }catch(e){
+  const status=document.getElementById('ocrStatus');
+  if(status)status.textContent='Falha na leitura: '+(e?.message||'tente novamente');
+ }
+ finally{
+  ocrBusy=false;
+  const b=document.getElementById('ocrGo');if(b){b.disabled=false;b.textContent='Ler agora'}
+ }
+ return null;
+}
+async function ocrAuto(){
+ ocrOn=true;ocrLast=null;ocrHits=0;
+ while(ocrOn&&document.getElementById('ocr')){
+  if(!ocrBusy){
+   const val=await ocrScanOnce();
+   if(!ocrOn)return;
+   if(val!==null&&val===ocrLast)ocrHits++;
+   else{ocrLast=val;ocrHits=val===null?0:1}
+   // Confirma a mesma leitura em três quadros para evitar preencher valores instáveis.
+   if(val!==null&&ocrHits>=3){
+    const f=ocrCtx;ocrClose();
+    if(f){f.value=val.replace('.',',');f.dataset.ocr='1';f.dispatchEvent(new Event('input',{bubbles:true}));f.focus();f.setSelectionRange(f.value.length,f.value.length)}
+    if(navigator.vibrate)navigator.vibrate(80);
+    return;
+   }
+  }
+  await new Promise(resolve=>setTimeout(resolve,650));
+ }
+}
+async function ocrScanOnceAndFill(){
+ const value=await ocrScanOnce();
+ if(value===null)return;
+ const f=ocrCtx;ocrClose();
+ if(f){f.value=value.replace('.',',');f.dataset.ocr='1';f.dispatchEvent(new Event('input',{bubbles:true}));f.focus();f.setSelectionRange(f.value.length,f.value.length)}
+}
+async function ocrReadNow(){return ocrScanOnceAndFill()}
 function allDays(){return new Promise((res,rej)=>{let q=tx('readonly').getAll();q.onsuccess=()=>res(q.result||[]);q.onerror=()=>rej(q.error)})}
 async function showHistory(filter='all'){screen='history';
  let days=(await allDays()).filter(d=>Object.values(d.records||{}).some(r=>r.done)).sort((a,b)=>b.date.localeCompare(a.date));
