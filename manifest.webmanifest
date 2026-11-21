@@ -1,0 +1,32 @@
+{
+  "name": "Controle de Temperaturas",
+  "short_name": "Temperaturas",
+  "description": "Registro de aferição de temperaturas - Filial Parnamirim 245",
+  "start_url": "./",
+  "scope": "./",
+  "display": "standalone",
+  "orientation": "portrait",
+  "background_color": "#0e1815",
+  "theme_color": "#0e1815",
+  "lang": "pt-BR",
+  "icons": [
+    {
+      "src": "icone_192.png",
+      "sizes": "192x192",
+      "type": "image/png",
+      "purpose": "any"
+    },
+    {
+      "src": "icone_512.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "any"
+    },
+    {
+      "src": "icone_512_maskable.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "maskable"
+    }
+  ]
+}
