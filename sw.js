@@ -1,10 +1,14 @@
 // Controle de Temperaturas - guarda o app no celular para abrir sem internet.
-const VERSAO = 'v13';
+const VERSAO = 'v14';
 const CACHE = 'controle-temperaturas-' + VERSAO;
 const ARQUIVOS = ['./', './index.html', './manifest.webmanifest', './icone_192.png', './icone_512.png', './icone_512_maskable.png'];
+// Opcionais: se algum faltar no servidor, a instalação não falha.
+const OPCIONAIS = ['./splash.png', './splash-dark.png'];
 
 self.addEventListener('install', e => {
-  e.waitUntil(caches.open(CACHE).then(c => c.addAll(ARQUIVOS)).then(() => self.skipWaiting()));
+  e.waitUntil(caches.open(CACHE)
+      .then(c => c.addAll(ARQUIVOS).then(() => Promise.all(OPCIONAIS.map(u => c.add(u).catch(() => {})))))
+      .then(() => self.skipWaiting()));
 });
 
 self.addEventListener('activate', e => {
