@@ -246,7 +246,7 @@ function admLim(id,inp){const n=admNorm(inp.value);if(!n){alert('Faixa inválida
 function admDelEq(id,b){const e=EQUIPAMENTOS.find(x=>x.id===id);if(!e||!confirm('Excluir "'+e.name+'"? Os registros antigos dele deixam de aparecer nos relatórios.'))return;CFG.del.push(id);cfgSave();aplicarCfg();b.closest('.item').remove()}
 function admDelFis(i){if(FISCAIS.length<=1){alert('Mantenha pelo menos um fiscal.');return}if(!confirm('Excluir "'+FISCAIS[i]+'"?'))return;const f=[...FISCAIS];f.splice(i,1);CFG.fiscais=f;cfgSave();aplicarCfg();admHome()}
 function admAddFis(){const n=$('nFis').value.trim();if(!n){alert('Digite o nome.');return}if(FISCAIS.some(x=>x.toLowerCase()===n.toLowerCase())){alert('Esse fiscal já está cadastrado.');return}CFG.fiscais=[...FISCAIS,n];cfgSave();aplicarCfg();admHome()}
-const SCRIPT_URL='https://script.google.com/a/macros/atacadao.com.br/s/AKfycby9VfV0B02_ijL4kr55nOl9RjrEPwuLPz0JDjA5uZ7P/dev';let EMAILPEND=null;
+const SCRIPT_URL='https://script.google.com/a/macros/atacadao.com.br/s/AKfycbz0luqT3257Aj5PauvPoqDae7IdJBOvAdDe3IxW0lbAhsY0zAu5z6B1NG1TMrDAsr984w/exec';let EMAILPEND=null;
 function emailsDest(){return Array.isArray(CFG.emails)?CFG.emails:[]}
 function emailOk(v){return /^[^\s@,;<>]+@[^\s@,;<>]+\.[^\s@,;<>]+$/.test(v)}
 function admEmailEdit(i,inp){const v=inp.value.trim().toLowerCase(),L=[...emailsDest()];if(!emailOk(v)){alert('E-mail inválido.');inp.value=L[i];return}if(L.some((x,k)=>k!==i&&x===v)){alert('Esse e-mail já está cadastrado.');inp.value=L[i];return}L[i]=v;CFG.emails=L;cfgSave();inp.value=v}
